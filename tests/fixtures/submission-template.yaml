@@ -1,0 +1,22 @@
+# Coldline - Task 3.10
+# File: submission-template.yaml
+# Component: Public verifier fixture
+# Purpose: Exercise the shipped, blank answer sheet inside the public test suite.
+# Interacts With: tests/contract/test_submission.py
+# Sprint/Task: Sprint 3 - Project 3 / Task 3.10
+# Concepts: Deterministic assessment, blank-sheet rejection
+# Tools: YAML
+
+# The shipped submission.yaml, byte-for-byte in shape: every value blank, zero, or false.
+answers:
+  status_ttl_seconds: 0
+  first_read_outcome: ""
+  second_read_outcome: ""
+  post_update_read_outcome: ""
+  post_update_read_state: ""
+  stale_reads_after_update: 0
+  freshness_window:
+    reads_that_may_be_stale: ""
+    max_staleness_seconds: 0
+    acceptable_for_recipient_acceptance: false
+    note: ""

@@ -1,0 +1,28 @@
+# Coldline - Task 3.10
+# File: submission-sample.yaml
+# Component: Fictional completed answer sheet
+# Purpose: Show the accepted shape.
+# Interacts With: docs/contracts/submission.schema.json
+# Sprint/Task: Sprint 3 - Project 3 / Task 3.10
+# Concepts: Answer-sheet shape
+# Tools: YAML
+
+# Complete submission.yaml from your own runs and the sources named beside each answer group.
+# Keep the supplied keys; replace empty strings and zeros using each field's stated type.
+# Empty values and placeholder text fail verification.
+# Use submission-sample.yaml for format only; do not copy its fictional values.
+# Do not include secrets, personal data, or local absolute paths.
+# This fictional sample is not a result to submit; an exact copy is rejected.
+
+answers:
+  status_ttl_seconds: 90
+  first_read_outcome: "hit"
+  second_read_outcome: "hit"
+  post_update_read_outcome: "hit"
+  post_update_read_state: "PROCESSING"
+  stale_reads_after_update: 7
+  freshness_window:
+    reads_that_may_be_stale: "all"
+    max_staleness_seconds: 95
+    acceptable_for_recipient_acceptance: false
+    note: "Fictional: the clinic was acting on a refresh that could be a minute and a half old, and the page still shows the earlier state after the result lands, so a delivery decision cannot be made from it yet. One laptop with one Redis proves nothing about a managed cache's own failover."

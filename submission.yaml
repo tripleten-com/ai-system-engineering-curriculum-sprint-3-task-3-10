@@ -1,0 +1,56 @@
+# Coldline - Task 3.10
+# File: submission.yaml
+# Component: Student answer sheet
+# Purpose: Record your TTL, the outcomes from your own probe runs, and the structured freshness window.
+# Interacts With: Submission schema, public verifier, cache contract checks, protected answer key
+# Sprint/Task: Sprint 3 - Project 3 / Task 3.10
+# Concepts: Read-through cache, time to live, cache hit and miss, staleness, freshness window
+# Tools: YAML
+
+# Complete submission.yaml from your own runs and the sources named beside each answer group.
+# Keep the supplied keys; replace empty strings and zeros using each field's stated type.
+# Empty values and placeholder text fail verification.
+# Use submission-sample.yaml for format only; do not copy its fictional values.
+# Do not include secrets, personal data, or local absolute paths.
+
+answers:
+  # Task 3.10 — Step 1: the TTL
+  # Source: status_ttl_seconds in config/cache.yaml, the same whole number of seconds
+  # (5 to 120 inclusive). The check compares the two.
+  status_ttl_seconds: 0
+
+  # Task 3.10 — Step 2: the first two reads
+  # Source: the first two `read` lines of your last `poe cache-probe` run, as committed in
+  # docs/student/cache/probe.json. Each is exactly hit or miss, as the probe printed it.
+  first_read_outcome: ""
+  second_read_outcome: ""
+
+  # Task 3.10 — Step 3: the first read after the worker's result
+  # Source: the first `read` line after the "worker result written" mark in that same run.
+  # post_update_read_outcome: hit | miss, as printed.
+  # post_update_read_state: the state that read returned, one of RECEIVED, QUEUED,
+  #   PROCESSING, COMPLETED, FAILED.
+  # stale_reads_after_update: how many reads after the mark returned any earlier state,
+  #   a whole number of at least 0, counted from that output.
+  post_update_read_outcome: ""
+  post_update_read_state: ""
+  stale_reads_after_update: 0
+
+  # Task 3.10 — Step 4: the freshness window for recipient acceptance
+  # Derive every field from your TTL and your probe runs together, not from either alone.
+  # reads_that_may_be_stale: none | in_progress_only | all
+  #   which status reads may return a copy older than the store: none may; only reads made
+  #   before the worker has written a terminal state may; or any read may, including reads
+  #   after the result is written.
+  # max_staleness_seconds: a whole number of at least 0, the longest a status read may lag
+  #   the store with your TTL and your invalidation in place.
+  # acceptable_for_recipient_acceptance: true | false, whether a recipient may base an
+  #   acceptance decision on the status view as it now behaves.
+  # note: at most 400 characters, in Elena's terms: which read the clinic in her email was
+  #   acting on, what the view now guarantees about that read, and one limit of what your
+  #   single-host run proves.
+  freshness_window:
+    reads_that_may_be_stale: ""
+    max_staleness_seconds: 0
+    acceptable_for_recipient_acceptance: false
+    note: ""

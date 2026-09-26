@@ -1,0 +1,25 @@
+# Coldline - Task 3.10
+# File: config/cache.yaml
+# Component: Exception status cache configuration
+# Purpose: Hold the one value this Task asks you to choose: how long a cached status copy may live.
+# Interacts With: src/api/status_cache.py, src/adapters/cache/redis_status_cache.py, poe cache-probe
+# Sprint/Task: Sprint 3 - Project 3 / Task 3.10
+# Concepts: Read-through cache, time to live, staleness
+# Tools: YAML, Redis
+
+# This file holds exactly one key. Nothing else belongs here: no second cache, no second
+# key, no refresh interval. The API reads it once at start-up and refuses to serve when the
+# key is missing, doubled, not a whole number, or outside the range below, so a typo shows
+# up as a failed `poe start` rather than as a cache that quietly keeps copies too long.
+#
+# status_ttl_seconds: how many seconds Redis keeps a cached copy of an exception status
+# before discarding it. A whole number from 5 to 120 inclusive. A copy may be exactly this
+# many seconds old when a reader is served it, so pick the number you would say out loud to
+# Elena: long enough that staff refreshing the same exception during one wait on a dock,
+# and dozens of clinics doing so at once, are answered from the copy; short enough that the
+# in-progress states a dispatcher watches are never older than you can defend. Copy the same
+# number into answers.status_ttl_seconds in submission.yaml, and run `poe start` again after
+# changing it, because the containers read this file when they are built.
+#
+# The supplied value is the bottom of the range. Choose yours in Step 1.
+status_ttl_seconds: 5

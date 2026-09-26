@@ -1,0 +1,20 @@
+# Coldline
+# File: .gitignore
+# Component: Repository hygiene
+# Purpose: Exclude local tools, caches, and runtime state from commits.
+# Interacts With: Git and local development tools
+# Sprint/Task: Sprint 2 — Project 2
+# Concepts: Clean working tree
+# Tools: Git
+
+.env
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.tools/
+.venv/
+**/__pycache__/
+*.py[cod]
+
+# Optional captures describe this checkpoint; they are not submission artifacts.
+.benchmark/

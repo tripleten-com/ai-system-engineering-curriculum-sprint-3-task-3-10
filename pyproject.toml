@@ -1,0 +1,252 @@
+# Coldline - Task 3.10
+# File: pyproject.toml
+# Component: Python project contract
+# Purpose: Define one installable project, pinned tools, tests, and Poe commands.
+# Interacts With: src packages, tests, uv.lock
+# Sprint/Task: Sprint 3 - Project 3 / Task 3.10
+# Concepts: Single-project reproducibility, read-through cache, invalidation, freshness window
+# Tools: uv, Hatchling, Poe, Ruff, mypy, pytest
+
+[project]
+name = "coldline-task-2-1"
+version = "0.1.0"
+description = "Coldline Sprint 3 platform operations and reliability project"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "alembic==1.17.1",
+  "asyncpg==0.31.0",
+  "boto3==1.42.5",
+  "opentelemetry-api==1.44.0",
+  "opentelemetry-exporter-otlp==1.44.0",
+  "opentelemetry-instrumentation-redis==0.65b0",
+  "opentelemetry-sdk==1.44.0",
+  "prometheus-client==0.26.0",
+  "pydantic==2.13.4",
+  "pydantic-settings==2.15.0",
+  "redis==5.3.1",
+  "sqlalchemy==2.0.44",
+]
+
+[dependency-groups]
+api = [
+  "fastapi==0.141.1",
+  "opentelemetry-instrumentation-fastapi==0.65b0",
+  "pyyaml==6.0.3",
+  "uvicorn==0.52.4",
+]
+worker = []
+dev = [
+  "httpx==0.28.1",
+  "jsonschema==4.26.0",
+  "locust>=2.31",
+  "mypy==2.3.1",
+  "poethepoet==0.48.0",
+  "pytest==9.1.1",
+  "pytest-asyncio==1.4.0",
+  "pyyaml==6.0.3",
+  "ruff==0.16.3",
+]
+
+[build-system]
+requires = ["hatchling==1.32.0"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/api", "src/worker", "src/domain", "src/ports", "src/adapters"]
+
+[tool.uv]
+default-groups = ["api", "worker", "dev"]
+
+[tool.pytest.ini_options]
+addopts = "-ra --import-mode=importlib"
+testpaths = ["tests"]
+pythonpath = ["."]
+asyncio_mode = "auto"
+markers = [
+  "runtime: requires the running Docker Compose stack",
+  "assessed: checks student work this Task assesses, so a fresh starter is expected to fail it",
+  "submission_boundary: asserts a student submission stays inside this Task's editable paths",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "D"]
+ignore = ["D203", "D213"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = [
+  "src",
+  "infra/scripts",
+  "infra/cache",
+  "tests/contract/authoring.py",
+  "tests/contract/runtime_adapters.py",
+  "tests/contract/retrieval_runtime.py",
+  "tests/contract/submission_validation.py",
+  "tests/contract/slo_alert.py",
+  "tests/contract/reliability_gate.py",
+  "tests/contract/runbook_contract.py",
+  "tests/contract/fidelity_check.py",
+  "tests/contract/cache_contract.py",
+  "tests/contract/test_cache_contract.py",
+  "tests/smoke/readiness.py",
+  "tests/e2e/scenario.py",
+  "tests/e2e/baseline.py",
+  "tests/golden.py",
+  "tests/doubles",
+  "tests/benchmark",
+  "tests/regression.py",
+  "tests/diagnostics",
+  "tests/failure",
+]
+
+[[tool.mypy.overrides]]
+# These runtime libraries do not publish complete typing metadata.
+# Typed boundary wrappers keep their use inside adapters and configuration modules.
+module = ["asyncpg", "boto3", "botocore", "botocore.*", "jsonschema", "yaml"]
+ignore_missing_imports = true
+
+[tool.poe.tasks]
+format = "ruff format ."
+format-check = "ruff format --check ."
+lint = "ruff check ."
+typecheck = "mypy"
+unit = "pytest tests/unit"
+contract = "pytest tests/contract -m 'not runtime and not assessed'"
+runtime-contract = "pytest tests/contract -m runtime"
+queue-contract = "pytest tests/contract/test_runtime_adapters.py -m runtime"
+# Task 3.4's own automated check: the deployed alert rule's bound, firing, and resolution.
+slo-contract = "pytest tests/contract/test_slo_alert.py -m runtime"
+# Task 3.5's own automated check: the wired reliability-gate job's static shape, plus a
+# live proof that it actually rejects its own Task's known starting-broken value.
+gate-contract = "pytest tests/contract/test_reliability_gate.py -m runtime"
+# Task 3.6's automated check, inherited unchanged over the supplied, settled runbook and
+# fidelity record. Static, needs no running stack, and passes as shipped; a failure here
+# means the checkpoint, not the student's work, needs attention. `fidelity-check` below
+# remains as a narrower alias for just the fidelity-record half.
+runbook-contract = "pytest tests/contract/test_runbook_contract.py tests/contract/test_fidelity_check.py"
+fidelity-check = "pytest tests/contract/test_fidelity_check.py"
+smoke = "pytest tests/smoke -m runtime"
+e2e = "pytest tests/e2e -m runtime"
+telemetry-repair = "pytest tests/contract/test_telemetry_repair.py -m runtime"
+retrieval-runtime = "pytest tests/contract/test_retrieval_runtime.py -m runtime"
+# Alembic diagnostics. The initializer already brings the schema to head on
+# every start, so these are for inspecting and stepping that state by hand.
+migrate = "docker compose --profile observability --profile localstack exec -T api alembic upgrade head"
+migrate-down = "docker compose --profile observability --profile localstack exec -T api alembic downgrade -1"
+migrate-current = "docker compose --profile observability --profile localstack exec -T api alembic current"
+# The experiment harness. One command per arm, one retained report per
+# capture, so the baseline evidence survives an experiment run: see
+# docs/contracts/benchmark-report.schema.json for the retained report contract.
+# `compare` re-measures nothing - it reads those two reports and applies the
+# published adoption rule from config/adoption-policy.yaml.
+benchmark-baseline = "python -m tests.benchmark.run --arm baseline"
+benchmark-experiment = "python -m tests.benchmark.run --arm experiment"
+compare = "python -m tests.benchmark.compare"
+# Re-measures both arms and prints the drift from the retained reports. It
+# writes nothing and grades nothing; a recorded decision keeps the evidence it
+# was graded against.
+benchmark-reproduce = "python -m tests.benchmark.reproduce"
+# The retained-report validation, which assesses nothing and needs no
+# container: a missing or self-inconsistent report must fail validation rather
+# than become a decision.
+report-contract = "pytest tests/contract/test_benchmark_reports.py"
+# The intermediate stage inspector, kept as Part 3 evidence for the defense.
+diagnose = "python -m tests.diagnostics.inspect"
+authorization-checkpoint = "pytest tests/contract/test_authorization_checkpoint.py -m runtime"
+student-tests = "pytest tests/student"
+test = ["unit", "contract"]
+preflight = "python infra/scripts/preflight.py"
+start = "docker compose --profile observability --profile localstack up --build --wait"
+ready = "python -m tests.smoke.readiness"
+ingest = "docker compose --profile observability --profile localstack exec -T api python -m api.ingest"
+baseline = "python -m tests.e2e.baseline"
+scenario = "python -m tests.e2e.scenario"
+# Task 3.10's probe. Against the running stack, it submits one reading, reads its status
+# twice before the worker can have finished, waits for the worker's result by polling the
+# store itself and marks that point, then reads again until a read returns the worker's
+# state plus two more. It prints one line per read (hit or miss, the state, the age of
+# the copy served) and the counters' movement, and writes the same sequence to
+# docs/student/cache/probe.json with a generator marker and a content digest. Never edit
+# that file; rerun instead, after `poe start` has rebuilt the images with your code.
+cache-probe = "python infra/cache/cache_probe.py"
+# Task 3.10's own check. `answers` validates the answer sheet's format, refuses the
+# untouched cache record template, and compares the diff from the merge base with the six
+# permitted files; it is static and runs first in public CI so a boundary violation fails
+# fast. `cache-checks` are the assessed checks: the read-through and the invalidation
+# against an in-process cache and store, the configuration's single key and range, the
+# committed probe output's digest and its agreement with the answers, the freshness
+# window's allowed values, and, against the running stack, the two counters on /metrics
+# and one live probe run compared with the committed output and the answers.
+# `cache-contract` is the two together, the check `poe verify` runs for this Task. The
+# live probe waits for the worker, so expect it to take a few minutes.
+answers = "python -m tests.contract.submission_validation"
+cache-checks = "pytest tests/contract/test_cache_contract.py"
+cache-contract = ["answers", "cache-checks"]
+structure = "python -m tests.contract.authoring"
+compose-config = "docker compose --profile observability --profile localstack config --quiet"
+# Task 3.3's own failure exercise, unchanged and still runnable, but not part
+# of this Task.
+worker-stop = "docker compose --profile observability --profile localstack stop worker"
+worker-start = "docker compose --profile observability --profile localstack start worker"
+inject-failure = "python -m tests.failure.force_dlq_arrival"
+redrive = "python -m tests.failure.redrive_and_verify"
+# Task 3.4's own student-facing failure exercise, unchanged and still runnable.
+trigger-alert-load = "python -m tests.failure.trigger_alert_load"
+verify-alert-recovery = "python -m tests.failure.verify_alert_recovery"
+# Task 3.6's own student-facing failure lab, unchanged and still runnable. It stops and
+# starts the worker itself; run it against a stack `poe start` already brought up, and
+# never from automated CI.
+dev-failure-lab = "python -m tests.failure.dev_failure_lab"
+# The public path. `cache-contract` runs the probe against the stack `start` brought up
+# from your code, so the smoke and end-to-end checks that follow prove the checkpoint
+# still serves and completes a workflow through the cached status route.
+verify = [
+  "unit",
+  "start",
+  "ready",
+  "ingest",
+  "cache-contract",
+  "smoke",
+  "e2e",
+  "student-tests",
+]
+author-verify = [
+  "format-check",
+  "lint",
+  "typecheck",
+  "unit",
+  "contract",
+  "structure",
+  "compose-config",
+]
+dogfood-verify = [
+  "author-verify",
+  "ready",
+  "ingest",
+  "runtime-contract",
+  "smoke",
+  "e2e",
+  "scenario",
+  "baseline",
+  "restart",
+  "ready",
+  "e2e",
+  "reset",
+]
+restart = "docker compose --profile observability --profile localstack restart api worker"
+# Compose's `up` (what `poe start` runs) only recreates a container when the
+# container's own configuration changes (image, environment, build args, and
+# so on); it does not track bind-mounted file content, so editing
+# `infra/observability/alerts.yml` and running `poe start` again never makes
+# Prometheus re-read it. This restarts just the Prometheus container so it
+# reloads its rule file.
+reload-alerts = "docker compose --profile observability --profile localstack restart prometheus"
+reset = "docker compose --profile observability --profile localstack down --volumes --remove-orphans"
+stop = "docker compose --profile observability --profile localstack down --remove-orphans"
+load-test = "locust -f loadtest/locustfile.py --headless --users 2 --spawn-rate 2 --run-time 30s --host http://localhost:${COLDLINE_API_HOST_PORT:-8000}"
+reset-baseline = { shell = "docker compose --profile observability --profile localstack exec -T postgres psql -U coldline -d coldline -c \"TRUNCATE exceptions;\" && docker compose --profile observability --profile localstack exec -T redis redis-cli FLUSHDB && docker compose --profile observability --profile localstack restart worker" }

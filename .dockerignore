@@ -1,0 +1,24 @@
+# Coldline
+# File: .dockerignore
+# Component: Container build input
+# Purpose: Keep local caches and build artifacts out of image layers.
+# Interacts With: Docker build contexts
+# Sprint/Task: Sprint 1 — Project 1
+# Concepts: Small and safe image inputs
+# Tools: Docker
+
+.git
+.tools
+.venv
+.env
+**/__pycache__
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+**/tests
+.devcontainer
+.github
+.vscode
+docs
+submission.yaml
+submission-sample.yaml

@@ -1,0 +1,105 @@
+"""Coldline.
+
+===================
+
+File:              tests/failure/force_dlq_arrival.py
+Component:         Failure tools — Force dead-letter arrival
+Purpose:           Submit one real exception, then force it to the dead-letter queue.
+Interacts With:    The API, LocalStack SQS
+Sprint/Task:       Sprint 3 — Project 3
+Concepts:          Dead-letter redrive, deterministic infrastructure, evidence
+Tools:             Python 3.12, boto3, httpx
+"""
+
+import json
+from typing import Any
+
+import httpx
+
+from tests.failure.queue_client import client, queue_url
+from tests.runtime_config import host_port
+
+QUEUE_NAME = "coldline-exception-jobs"
+DEAD_LETTER_NAME = "coldline-exception-jobs-dlq"
+READING = {
+    "reading_id": "reading-dlq-exercise-001",
+    "shipment_id": "shipment-dlq-exercise-001",
+    "temperature_c": 11.4,
+    "allowed_min_c": 2.0,
+    "allowed_max_c": 8.0,
+    "recorded_at": "2026-01-01T00:00:00Z",
+    "context": "Sprint 3 Task 3.3 dead-letter exercise",
+}
+
+
+def _max_receive_count(sqs: Any, url: str) -> int:
+    """Read the deployed redrive policy's bound from the live queue."""
+    attributes = sqs.get_queue_attributes(QueueUrl=url, AttributeNames=["RedrivePolicy"])[
+        "Attributes"
+    ]
+    policy = json.loads(attributes["RedrivePolicy"])
+    return int(policy["maxReceiveCount"])
+
+
+def main() -> int:
+    """Submit one exception, then simulate its transport-level exhaustion.
+
+    The worker must be stopped before running this
+    (`docker compose --profile observability --profile localstack stop worker`),
+    so nothing else races to process the message while this script repeatedly
+    receives it without acknowledging it. Each receive-without-delete leaves
+    SQS's own visibility timeout to elapse before the message becomes visible
+    again; `change_message_visibility` collapses that wait to make the exercise
+    deterministic instead of waiting for real time to pass.
+    """
+    api_port = host_port("COLDLINE_API_HOST_PORT", 8000)
+    with httpx.Client(base_url=f"http://localhost:{api_port}", timeout=5.0) as api:
+        accepted = api.post("/api/v1/readings", json=READING)
+        accepted.raise_for_status()
+        exception_id = accepted.json()["exception_id"]
+
+    sqs = client()
+    main_url = queue_url(sqs, name=QUEUE_NAME)
+    dlq_url = queue_url(sqs, name=DEAD_LETTER_NAME)
+    max_receive_count = _max_receive_count(sqs, main_url)
+
+    # One extra receive beyond the bound is what makes SQS redrive the message
+    # instead of returning it to the main queue once more.
+    for attempt in range(1, max_receive_count + 2):
+        response = sqs.receive_message(
+            QueueUrl=main_url,
+            MaxNumberOfMessages=1,
+            WaitTimeSeconds=2,
+            AttributeNames=["ApproximateReceiveCount"],
+        )
+        messages = response.get("Messages")
+        if not messages:
+            break
+        receive_count = int(messages[0]["Attributes"]["ApproximateReceiveCount"])
+        print(f"attempt {attempt}: receive_count={receive_count}, left unacknowledged", flush=True)
+        sqs.change_message_visibility(
+            QueueUrl=main_url,
+            ReceiptHandle=messages[0]["ReceiptHandle"],
+            VisibilityTimeout=0,
+        )
+
+    dlq_depth = int(
+        sqs.get_queue_attributes(QueueUrl=dlq_url, AttributeNames=["ApproximateNumberOfMessages"])[
+            "Attributes"
+        ]["ApproximateNumberOfMessages"]
+    )
+    print(
+        json.dumps(
+            {
+                "exception_id": exception_id,
+                "max_receive_count": max_receive_count,
+                "dead_letter_queue_depth": dlq_depth,
+            },
+            indent=2,
+        )
+    )
+    return 0 if dlq_depth >= 1 else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

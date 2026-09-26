@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "Coldline Task 3.10 public answer contract. The TTL the student chose, five values copied from the student's own probe output (the first two reads' outcomes, the first post-update read's outcome and state, and the count of stale reads after the update), and a structured freshness window. The cache contract checks compare the TTL with config/cache.yaml and the copied values with the committed probe output as written; the protected check compares the freshness window with the answer key. There is no self-attestation field, no pass boolean, and no recording URL.",
+  "title": "Coldline Task 3.10 answers",
+  "description": "The chosen TTL, the probe outcomes, and the freshness window for recipient acceptance.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["answers"],
+  "properties": {
+    "answers": {
+      "description": "The only top-level answer mapping accepted by the public verifier.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status_ttl_seconds",
+        "first_read_outcome",
+        "second_read_outcome",
+        "post_update_read_outcome",
+        "post_update_read_state",
+        "stale_reads_after_update",
+        "freshness_window"
+      ],
+      "properties": {
+        "status_ttl_seconds": {
+          "description": "The value of status_ttl_seconds in config/cache.yaml: a whole number of seconds inside the published range.",
+          "type": "integer",
+          "minimum": 5,
+          "maximum": 120
+        },
+        "first_read_outcome": {
+          "description": "The outcome the probe printed for its first read, before anything was cached.",
+          "$ref": "#/$defs/outcome"
+        },
+        "second_read_outcome": {
+          "description": "The outcome the probe printed for its second read, made within the TTL.",
+          "$ref": "#/$defs/outcome"
+        },
+        "post_update_read_outcome": {
+          "description": "The outcome the probe printed for the first read after it marked the worker's result as written.",
+          "$ref": "#/$defs/outcome"
+        },
+        "post_update_read_state": {
+          "description": "The state that first post-update read returned.",
+          "enum": ["RECEIVED", "QUEUED", "PROCESSING", "COMPLETED", "FAILED"]
+        },
+        "stale_reads_after_update": {
+          "description": "How many reads after the mark returned any earlier state, counted from the probe output.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "freshness_window": {
+          "description": "The staleness a recipient may accept, derived from the TTL and the probe runs together.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "reads_that_may_be_stale",
+            "max_staleness_seconds",
+            "acceptable_for_recipient_acceptance",
+            "note"
+          ],
+          "properties": {
+            "reads_that_may_be_stale": {
+              "description": "Which status reads may return a copy older than the store.",
+              "enum": ["none", "in_progress_only", "all"]
+            },
+            "max_staleness_seconds": {
+              "description": "The longest a status read may lag the store, in seconds, with the TTL and the invalidation in place.",
+              "type": "integer",
+              "minimum": 0
+            },
+            "acceptable_for_recipient_acceptance": {
+              "description": "Whether a recipient may base an acceptance decision on the status view as it now behaves.",
+              "type": "boolean"
+            },
+            "note": {
+              "description": "Why, in Elena's terms: which read the clinic was acting on, what the view now guarantees about it, and one limit of the single-host run.",
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 400
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "outcome": {
+      "description": "hit (served from the cached copy) or miss (read from the store), exactly as the probe printed it.",
+      "enum": ["hit", "miss"]
+    }
+  }
+}
