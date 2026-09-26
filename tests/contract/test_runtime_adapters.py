@@ -61,7 +61,9 @@ def test_postgres_and_sqs_adapters_preserve_runtime_contracts() -> None:
             capture_output=True,
             text=True,
             encoding="utf-8",
-            timeout=60,
+            # Normally about 10 s; the first production receive may poll up to one
+            # visibility timeout plus 10 s, so leave room for its diagnostics to print.
+            timeout=90,
             check=False,
         )
     finally:
