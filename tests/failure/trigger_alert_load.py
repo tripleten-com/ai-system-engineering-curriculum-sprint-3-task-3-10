@@ -21,7 +21,7 @@ from typing import Any
 import httpx
 
 from tests.failure.force_dlq_arrival import DEAD_LETTER_NAME, QUEUE_NAME
-from tests.failure.queue_client import client, queue_url
+from tests.failure.queue_client import client, exhaust_receive_budget, queue_counts, queue_url
 from tests.runtime_config import host_port
 
 TASK_ROOT = Path(__file__).resolve().parents[2]
@@ -86,25 +86,11 @@ def main() -> int:
     dlq_url = queue_url(sqs, name=DEAD_LETTER_NAME)
     max_receive_count = _max_receive_count(sqs, main_url)
 
-    # One extra receive beyond the bound is what makes SQS redrive the message
-    # instead of returning it to the main queue once more.
-    for attempt in range(1, max_receive_count + 2):
-        response = sqs.receive_message(
-            QueueUrl=main_url,
-            MaxNumberOfMessages=1,
-            WaitTimeSeconds=2,
-            AttributeNames=["ApproximateReceiveCount"],
-        )
-        messages = response.get("Messages")
-        if not messages:
-            break
-        receive_count = int(messages[0]["Attributes"]["ApproximateReceiveCount"])
-        print(f"attempt {attempt}: receive_count={receive_count}, left unacknowledged", flush=True)
-        sqs.change_message_visibility(
-            QueueUrl=main_url,
-            ReceiptHandle=messages[0]["ReceiptHandle"],
-            VisibilityTimeout=0,
-        )
+    # Receives without acknowledging until SQS redrives the message; see
+    # `exhaust_receive_budget` for why an empty first receive keeps polling.
+    # This all happens before the worker restarts, so it never spends any of
+    # the alert wait below.
+    forcing = exhaust_receive_budget(sqs, main_url, max_receive_count=max_receive_count)
 
     dlq_depth = int(
         sqs.get_queue_attributes(QueueUrl=dlq_url, AttributeNames=["ApproximateNumberOfMessages"])[
@@ -118,6 +104,9 @@ def main() -> int:
                     "exception_id": exception_id,
                     "dead_letter_queue_depth": dlq_depth,
                     "alert_state": "not_dead_lettered",
+                    "max_receive_count": max_receive_count,
+                    "main_queue": queue_counts(sqs, main_url),
+                    **forcing,
                 },
                 indent=2,
             )

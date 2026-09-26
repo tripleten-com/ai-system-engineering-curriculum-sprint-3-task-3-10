@@ -12,7 +12,9 @@ Tools:             Python 3.12, pytest, PostgreSQL, boto3, LocalStack
 """
 
 import asyncio
+import time
 from datetime import UTC, datetime
+from typing import Any
 from uuid import uuid4
 
 import asyncpg
@@ -32,6 +34,8 @@ from worker.use_cases import ProcessingDisposition, WorkerApplication
 
 DATABASE_URL = "postgresql://coldline:coldline_local@postgres:5432/coldline"
 LOCALSTACK_ENDPOINT = "http://localstack:4566"
+# Margin added to a queue's own visibility timeout while waiting for a first receive.
+FIRST_RECEIVE_MARGIN_SECONDS = 10.0
 
 
 class AlwaysFailProvider:
@@ -156,14 +160,12 @@ async def verify() -> None:
         )
         await production_queue.publish(recovery_job)
         try:
-            first_receive = await asyncio.to_thread(
-                sqs.receive_message,
-                QueueUrl=production_url,
-                MaxNumberOfMessages=1,
-                WaitTimeSeconds=2,
+            messages = await _receive_first(sqs, production_url)
+            assert messages, (
+                "the first receive did not observe the just-published message within one "
+                "visibility timeout; production queue counts: "
+                f"{await asyncio.to_thread(_queue_counts, sqs, production_url)}"
             )
-            messages = first_receive.get("Messages")
-            assert messages, "the first receive did not observe the just-published message"
             # A per-call VisibilityTimeout on receive_message is not reliably honored by
             # this LocalStack version; change_message_visibility on the message already
             # in hand is the documented, dependable way to force it visible again
@@ -174,6 +176,8 @@ async def verify() -> None:
                 ReceiptHandle=messages[0]["ReceiptHandle"],
                 VisibilityTimeout=0,
             )
+            # Rare path: if a killed receiver's open poll took this message first, that dead
+            # receive already used one delivery, so even maxReceiveCount=2 can fail here.
             recovered = await _poll_for_redelivery(production_queue, recovery_job)
             assert (
                 recovered is not None
@@ -214,6 +218,49 @@ async def _poll_for_redelivery(
             return delivery
         await asyncio.sleep(delay_seconds)
     return None
+
+
+async def _receive_first(sqs: Any, url: str) -> list[dict[str, Any]]:
+    """Receive the just-published message, polling past an empty first answer.
+
+    A worker container killed during its own long poll leaves that request
+    open inside LocalStack, which can hand the next published message to it.
+    The message then stays invisible for one visibility timeout. Polling until
+    the queue's own visibility timeout plus a margin has passed absorbs that
+    instead of failing on the first empty receive.
+    """
+    visibility_timeout = await asyncio.to_thread(
+        lambda: int(
+            sqs.get_queue_attributes(QueueUrl=url, AttributeNames=["VisibilityTimeout"])[
+                "Attributes"
+            ]["VisibilityTimeout"]
+        )
+    )
+    deadline = time.monotonic() + visibility_timeout + FIRST_RECEIVE_MARGIN_SECONDS
+    while True:
+        response = await asyncio.to_thread(
+            sqs.receive_message,
+            QueueUrl=url,
+            MaxNumberOfMessages=1,
+            WaitTimeSeconds=2,
+        )
+        messages: list[dict[str, Any]] = response.get("Messages") or []
+        if messages or time.monotonic() >= deadline:
+            return messages
+
+
+def _queue_counts(sqs: Any, url: str) -> dict[str, int]:
+    """Return one queue's visible and in-flight message counts, for a failure message."""
+    attributes = sqs.get_queue_attributes(
+        QueueUrl=url,
+        AttributeNames=["ApproximateNumberOfMessages", "ApproximateNumberOfMessagesNotVisible"],
+    )["Attributes"]
+    return {
+        "approximate_number_of_messages": int(attributes["ApproximateNumberOfMessages"]),
+        "approximate_number_of_messages_not_visible": int(
+            attributes["ApproximateNumberOfMessagesNotVisible"]
+        ),
+    }
 
 
 def _delete_queue_quietly(sqs: object, name: str) -> None:
