@@ -77,6 +77,22 @@ jobs:
           .tools/bin/uv run --frozen pytest tests/contract -m 'not runtime and not assessed and not submission_boundary'
           .tools/bin/uv run --frozen poe structure
           .tools/bin/uv run --frozen poe compose-config
+      # Registry pulls are the one network-dependent part of startup, so they are retried
+      # with backoff here; `poe start` below then finds every image already present.
+      - name: Pull and build the pinned images
+        run: |
+          compose="docker compose --profile observability --profile localstack"
+          for attempt in 1 2 3 4; do
+            if $compose pull --quiet --ignore-buildable && $compose build; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 4 ]; then
+              echo "::warning::image pull or build attempt $attempt failed; retrying in $((attempt * 15))s"
+              sleep $((attempt * 15))
+            fi
+          done
+          echo "::error::image pull or build failed after 4 attempts"
+          exit 1
       - name: Start the pinned runtime
         run: .tools/bin/uv run --frozen poe start
       - name: Wait for readiness
@@ -93,6 +109,19 @@ jobs:
         run: .tools/bin/uv run --frozen poe scenario
       - name: Run the baseline retrieval evaluation
         run: .tools/bin/uv run --frozen poe baseline
+      # On failure or cancellation (a `timeout-minutes` stop included), and before `poe reset`
+      # removes the containers: every service's logs, the initializer's included, so a
+      # startup failure leaves its reason behind.
+      - name: Show the runtime logs on failure
+        if: failure() || cancelled()
+        run: |
+          compose="docker compose --profile observability --profile localstack"
+          $compose ps --all || true
+          for service in $($compose config --services); do
+            echo "::group::$service logs"
+            $compose logs --no-color --timestamps "$service" || true
+            echo "::endgroup::"
+          done
       - name: Stop the runtime
         if: always()
         run: .tools/bin/uv run --frozen poe reset

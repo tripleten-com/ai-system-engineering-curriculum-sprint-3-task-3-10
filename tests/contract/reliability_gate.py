@@ -177,7 +177,14 @@ def _uv_binary() -> Path:
 
 
 def _run_poe(command: str) -> tuple[int, str]:
-    """Run one `poe` target through the pinned uv binary, exactly like the CI job would."""
+    """Run one `poe` target through the pinned uv binary, exactly like the CI job would.
+
+    The nested run's queue-forcing timing lines are relayed to this session's own
+    summary, so each forcing still reaches the job log exactly once, and are left out
+    of the returned output that a failure message quotes.
+    """
+    from tests.failure import forcing_timing
+
     result = subprocess.run(
         [str(_uv_binary()), "run", "--frozen", "poe", command],
         cwd=TASK_ROOT,
@@ -185,7 +192,9 @@ def _run_poe(command: str) -> tuple[int, str]:
         text=True,
         check=False,
     )
-    return result.returncode, result.stdout + result.stderr
+    output = result.stdout + result.stderr
+    forcing_timing.relay(output)
+    return result.returncode, forcing_timing.without_timing_lines(output)
 
 
 def _sqs_client() -> Any:

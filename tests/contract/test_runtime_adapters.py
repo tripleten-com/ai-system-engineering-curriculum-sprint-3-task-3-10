@@ -16,6 +16,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.failure import forcing_timing
+
 TASK_ROOT = Path(__file__).resolve().parents[2]
 pytestmark = pytest.mark.runtime
 
@@ -44,7 +46,27 @@ def test_postgres_and_sqs_adapters_preserve_runtime_contracts() -> None:
     # dependencies (already up).
     _compose("stop", "worker")
     try:
-        result = subprocess.run(
+        result = _run_verifier(verifier)
+    finally:
+        _compose("start", "worker")
+
+    # The verifier's queue-forcing timing line reaches the job log through the
+    # session summary (tests/conftest.py), passing or failing, and only there.
+    forcing_timing.relay(result.stdout)
+    assert result.returncode == 0, forcing_timing.without_timing_lines(
+        result.stdout + result.stderr
+    )
+    assert "Integration verification passed" in result.stdout
+
+
+def _run_verifier(verifier: str) -> subprocess.CompletedProcess[str]:
+    """Pipe the verifier into a one-off worker container and return what it printed.
+
+    A verifier that runs past the timeout may already have printed its timing line,
+    so the partial output is relayed before the timeout propagates.
+    """
+    try:
+        return subprocess.run(
             [
                 "docker",
                 "compose",
@@ -66,8 +88,10 @@ def test_postgres_and_sqs_adapters_preserve_runtime_contracts() -> None:
             timeout=90,
             check=False,
         )
-    finally:
-        _compose("start", "worker")
-
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert "Integration verification passed" in result.stdout
+    except subprocess.TimeoutExpired as exc:
+        for partial in (exc.stdout, exc.stderr):
+            if isinstance(partial, bytes):
+                partial = partial.decode("utf-8", errors="replace")
+            if partial:
+                forcing_timing.relay(partial)
+        raise

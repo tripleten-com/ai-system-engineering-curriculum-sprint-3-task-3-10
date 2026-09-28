@@ -160,7 +160,18 @@ async def verify() -> None:
         )
         await production_queue.publish(recovery_job)
         try:
-            messages = await _receive_first(sqs, production_url)
+            messages, first_receive_seconds, deadline_seconds = await _receive_first(
+                sqs, production_url
+            )
+            # One timing line per forcing; see _forcing_line.
+            print(
+                _forcing_line(
+                    first_receive_seconds=first_receive_seconds,
+                    receives_observed=len(messages),
+                    deadline_seconds=deadline_seconds,
+                ),
+                flush=True,
+            )
             assert messages, (
                 "the first receive did not observe the just-published message within one "
                 "visibility timeout; production queue counts: "
@@ -220,7 +231,7 @@ async def _poll_for_redelivery(
     return None
 
 
-async def _receive_first(sqs: Any, url: str) -> list[dict[str, Any]]:
+async def _receive_first(sqs: Any, url: str) -> tuple[list[dict[str, Any]], float, float]:
     """Receive the just-published message, polling past an empty first answer.
 
     A worker container killed during its own long poll leaves that request
@@ -228,6 +239,8 @@ async def _receive_first(sqs: Any, url: str) -> list[dict[str, Any]]:
     The message then stays invisible for one visibility timeout. Polling until
     the queue's own visibility timeout plus a margin has passed absorbs that
     instead of failing on the first empty receive.
+
+    Returns the messages, the seconds the receive took, and the deadline it had.
     """
     visibility_timeout = await asyncio.to_thread(
         lambda: int(
@@ -236,7 +249,8 @@ async def _receive_first(sqs: Any, url: str) -> list[dict[str, Any]]:
             ]["VisibilityTimeout"]
         )
     )
-    deadline = time.monotonic() + visibility_timeout + FIRST_RECEIVE_MARGIN_SECONDS
+    deadline_seconds = visibility_timeout + FIRST_RECEIVE_MARGIN_SECONDS
+    started = time.monotonic()
     while True:
         response = await asyncio.to_thread(
             sqs.receive_message,
@@ -245,8 +259,28 @@ async def _receive_first(sqs: Any, url: str) -> list[dict[str, Any]]:
             WaitTimeSeconds=2,
         )
         messages: list[dict[str, Any]] = response.get("Messages") or []
-        if messages or time.monotonic() >= deadline:
-            return messages
+        elapsed = time.monotonic() - started
+        if messages or elapsed >= deadline_seconds:
+            return messages, elapsed, deadline_seconds
+
+
+def _forcing_line(
+    *, first_receive_seconds: float, receives_observed: int, deadline_seconds: float
+) -> str:
+    """Return this forcing's timing line in the fixed shared queue-forcing format.
+
+    The same format as ``tests/failure/forcing_timing.py``, spelled out here because
+    this verifier is piped into a container and cannot import ``tests``;
+    ``tests/contract/test_runtime_adapters.py`` relays the line from the container's
+    output. A first receive that never saw the message reports the time it waited,
+    which is at least the deadline, and ``not_dead_lettered`` as its outcome.
+    """
+    outcome = "received" if receives_observed else "not_dead_lettered"
+    return (
+        f"queue-forcing helper=runtime_adapters first_receive_seconds={first_receive_seconds:.1f}"
+        f" receives_observed={receives_observed} deadline_seconds={deadline_seconds:.1f}"
+        f" outcome={outcome}"
+    )
 
 
 def _queue_counts(sqs: Any, url: str) -> dict[str, int]:

@@ -12,7 +12,10 @@ Tools:             Python 3.12, PostgreSQL, pgvector, boto3
 """
 
 import asyncio
+import time
+from collections.abc import Awaitable, Callable
 from pathlib import Path
+from typing import Any
 
 import asyncpg
 from alembic import command
@@ -36,6 +39,18 @@ ALEMBIC_CONFIG = "alembic.ini"
 CORPUS_FILES = ("documents.jsonl", "provenance.jsonl")
 LOCALSTACK_ATTEMPTS = 30
 LOCALSTACK_DELAY_SECONDS = 2.0
+POSTGRES_CONNECT_BUDGET_SECONDS = 30.0
+POSTGRES_FIRST_RETRY_DELAY_SECONDS = 0.5
+POSTGRES_MAX_RETRY_DELAY_SECONDS = 4.0
+POSTGRES_ATTEMPT_TIMEOUT_SECONDS = 5.0
+# "Not accepting connections yet", as opposed to "misconfigured": a refused, reset, or
+# timed-out TCP connect (OSError, which includes TimeoutError), a server that answers but
+# is still starting up (SQLSTATE 57P03), or a first-boot server closing mid-handshake.
+_POSTGRES_NOT_READY = (
+    OSError,
+    asyncpg.CannotConnectNowError,
+    asyncpg.ConnectionDoesNotExistError,
+)
 
 
 async def initialize() -> None:
@@ -52,7 +67,7 @@ async def initialize() -> None:
     already done.
     """
     settings = ApiSettings()  # type: ignore[call-arg]  # values come from the protected environment
-    connection = await asyncpg.connect(dsn=settings.database_url)
+    connection = await _connect_when_ready(settings.database_url)
     try:
         for schema_file in SCHEMA_FILES:
             await connection.execute(Path(schema_file).read_text(encoding="utf-8"))
@@ -60,6 +75,46 @@ async def initialize() -> None:
         await _provision_corpus_objects(settings)
     finally:
         await connection.close()
+
+
+async def _connect_when_ready(
+    dsn: str,
+    *,
+    budget_seconds: float = POSTGRES_CONNECT_BUDGET_SECONDS,
+    connect: Callable[..., Awaitable[Any]] = asyncpg.connect,
+    sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+    clock: Callable[[], float] = time.monotonic,
+) -> Any:
+    """Connect to PostgreSQL, retrying with backoff while it is still starting.
+
+    Compose starts this initializer once PostgreSQL's healthcheck passes, but a
+    first boot runs its setup on a temporary server and then restarts, so a
+    connection can still be refused for a moment. The wait is bounded: a
+    database that never answers fails the initializer with the reason instead
+    of leaving the stack half-provisioned. A configuration error, such as a
+    wrong password, is not a readiness failure and surfaces at once.
+    """
+    deadline = clock() + budget_seconds
+    delay = POSTGRES_FIRST_RETRY_DELAY_SECONDS
+    attempts = 0
+    while True:
+        attempts += 1
+        remaining = deadline - clock()
+        try:
+            return await connect(
+                dsn=dsn,
+                timeout=max(0.1, min(POSTGRES_ATTEMPT_TIMEOUT_SECONDS, remaining)),
+            )
+        except _POSTGRES_NOT_READY as exc:
+            remaining = deadline - clock()
+            if remaining <= 0:
+                raise RuntimeError(
+                    f"PostgreSQL did not accept connections within {budget_seconds:.0f} s "
+                    f"({attempts} attempts, last error: {exc!r}); check the postgres "
+                    "service with `docker compose logs postgres`"
+                ) from exc
+            await sleep(min(delay, remaining))
+            delay = min(delay * 2, POSTGRES_MAX_RETRY_DELAY_SECONDS)
 
 
 def apply_migrations() -> None:

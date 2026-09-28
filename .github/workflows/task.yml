@@ -54,12 +54,41 @@ jobs:
       # `poe start` builds from the pull request's code.
       - name: Check the answer sheet, the record, and the permitted-path boundary
         run: .tools/bin/uv run --frozen poe answers
+      # Registry pulls are the one network-dependent part of startup, so they are retried
+      # with backoff here; `poe start` below then finds every image already present.
+      - name: Pull and build the pinned images
+        run: |
+          compose="docker compose --profile observability --profile localstack"
+          for attempt in 1 2 3 4; do
+            if $compose pull --quiet --ignore-buildable && $compose build; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 4 ]; then
+              echo "::warning::image pull or build attempt $attempt failed; retrying in $((attempt * 15))s"
+              sleep $((attempt * 15))
+            fi
+          done
+          echo "::error::image pull or build failed after 4 attempts"
+          exit 1
       - name: Start the pinned runtime
         run: .tools/bin/uv run --frozen poe start
       - name: Ingest the supplied corpus
         run: .tools/bin/uv run --frozen poe ingest
       - name: Verify the public contract
         run: .tools/bin/uv run --frozen poe verify
+      # On failure or cancellation (a `timeout-minutes` stop included), and before `poe reset`
+      # removes the containers: every service's logs, the initializer's included, so a
+      # startup failure leaves its reason behind.
+      - name: Show the runtime logs on failure
+        if: failure() || cancelled()
+        run: |
+          compose="docker compose --profile observability --profile localstack"
+          $compose ps --all || true
+          for service in $($compose config --services); do
+            echo "::group::$service logs"
+            $compose logs --no-color --timestamps "$service" || true
+            echo "::endgroup::"
+          done
       - name: Stop the runtime
         if: always()
         run: .tools/bin/uv run --frozen poe reset
@@ -91,10 +120,39 @@ jobs:
           python infra/scripts/preflight.py
           echo "$PWD/.tools/bin" >> "$GITHUB_PATH"
           .tools/bin/uv sync --frozen
+      # Registry pulls are the one network-dependent part of startup, so they are retried
+      # with backoff here; `poe start` below then finds every image already present.
+      - name: Pull and build the pinned images
+        run: |
+          compose="docker compose --profile observability --profile localstack"
+          for attempt in 1 2 3 4; do
+            if $compose pull --quiet --ignore-buildable && $compose build; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 4 ]; then
+              echo "::warning::image pull or build attempt $attempt failed; retrying in $((attempt * 15))s"
+              sleep $((attempt * 15))
+            fi
+          done
+          echo "::error::image pull or build failed after 4 attempts"
+          exit 1
       - name: Start the pinned runtime
         run: .tools/bin/uv run --frozen poe start
       - name: Run the reliability check
         run: .tools/bin/uv run --frozen poe queue-contract
+      # On failure or cancellation (a `timeout-minutes` stop included), and before `poe reset`
+      # removes the containers: every service's logs, the initializer's included, so a
+      # startup failure leaves its reason behind.
+      - name: Show the runtime logs on failure
+        if: failure() || cancelled()
+        run: |
+          compose="docker compose --profile observability --profile localstack"
+          $compose ps --all || true
+          for service in $($compose config --services); do
+            echo "::group::$service logs"
+            $compose logs --no-color --timestamps "$service" || true
+            echo "::endgroup::"
+          done
       - name: Stop the runtime
         if: always()
         run: .tools/bin/uv run --frozen poe reset
