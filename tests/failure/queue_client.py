@@ -68,15 +68,18 @@ def exhaust_receive_budget(sqs: Any, url: str, *, max_receive_count: int) -> dic
     queue's own visibility timeout plus a margin has passed, instead of giving
     up on the first empty answer.
 
-    Returns the number of receives observed and how long the first one took.
+    Returns the number of receives observed, how long the first one took, and
+    the deadline the first receive was allowed: the fields of the timing line
+    in `tests/failure/forcing_timing.py`.
     """
     visibility_timeout = int(
         sqs.get_queue_attributes(QueueUrl=url, AttributeNames=["VisibilityTimeout"])["Attributes"][
             "VisibilityTimeout"
         ]
     )
+    deadline_seconds = visibility_timeout + FIRST_RECEIVE_MARGIN_SECONDS
     started = time.monotonic()
-    deadline = started + visibility_timeout + FIRST_RECEIVE_MARGIN_SECONDS
+    deadline = started + deadline_seconds
     first_receive_seconds: float | None = None
     announced_wait = False
     attempt = 0
@@ -93,7 +96,7 @@ def exhaust_receive_budget(sqs: Any, url: str, *, max_receive_count: int) -> dic
                 if not announced_wait:
                     print(
                         "no message visible yet; polling for up to "
-                        f"{visibility_timeout + FIRST_RECEIVE_MARGIN_SECONDS:.0f}s "
+                        f"{deadline_seconds:.0f}s "
                         "(one visibility timeout plus a margin)",
                         flush=True,
                     )
@@ -110,4 +113,8 @@ def exhaust_receive_budget(sqs: Any, url: str, *, max_receive_count: int) -> dic
             ReceiptHandle=messages[0]["ReceiptHandle"],
             VisibilityTimeout=0,
         )
-    return {"receives_observed": attempt, "first_receive_seconds": first_receive_seconds}
+    return {
+        "receives_observed": attempt,
+        "first_receive_seconds": first_receive_seconds,
+        "deadline_seconds": deadline_seconds,
+    }

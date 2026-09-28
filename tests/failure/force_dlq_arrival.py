@@ -16,6 +16,7 @@ from typing import Any
 
 import httpx
 
+from tests.failure.forcing_timing import emit, forcing_line
 from tests.failure.queue_client import client, exhaust_receive_budget, queue_counts, queue_url
 from tests.runtime_config import host_port
 
@@ -72,14 +73,19 @@ def main() -> int:
             "Attributes"
         ]["ApproximateNumberOfMessages"]
     )
+    # One timing line per forcing, printed on success too; see forcing_timing.py.
+    outcome = "dead_lettered" if dlq_depth >= 1 else "not_dead_lettered"
+    emit(forcing_line("force_dlq_arrival", forcing, outcome=outcome))
     evidence: dict[str, Any] = {
         "exception_id": exception_id,
         "max_receive_count": max_receive_count,
         "dead_letter_queue_depth": dlq_depth,
     }
     if dlq_depth < 1:
-        # Where the message is instead, and how the forcing loop saw it.
-        evidence.update(main_queue=queue_counts(sqs, main_url), **forcing)
+        # Where the message is instead.
+        evidence.update(main_queue=queue_counts(sqs, main_url))
+    # How the forcing loop saw it, on success and failure alike.
+    evidence.update(forcing)
     print(json.dumps(evidence, indent=2))
     return 0 if dlq_depth >= 1 else 1
 

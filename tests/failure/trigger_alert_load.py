@@ -21,6 +21,7 @@ from typing import Any
 import httpx
 
 from tests.failure.force_dlq_arrival import DEAD_LETTER_NAME, QUEUE_NAME
+from tests.failure.forcing_timing import emit, forcing_line
 from tests.failure.queue_client import client, exhaust_receive_budget, queue_counts, queue_url
 from tests.runtime_config import host_port
 
@@ -97,6 +98,9 @@ def main() -> int:
             "Attributes"
         ]["ApproximateNumberOfMessages"]
     )
+    # One timing line per forcing, printed on success too; see forcing_timing.py.
+    outcome = "dead_lettered" if dlq_depth >= 1 else "not_dead_lettered"
+    emit(forcing_line("trigger_alert_load", forcing, outcome=outcome))
     if dlq_depth < 1:
         print(
             json.dumps(
@@ -124,6 +128,7 @@ def main() -> int:
                 "dead_letter_queue_depth": dlq_depth,
                 "alert_state": alert_state,
                 "active_since": active_since,
+                **forcing,
             },
             indent=2,
         )

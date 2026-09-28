@@ -35,10 +35,15 @@ services:
       POSTGRES_USER: coldline
       POSTGRES_PASSWORD: coldline_local
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U coldline -d coldline"]
+      # TCP, not the Unix socket: first-boot setup runs a temporary socket-only
+      # server, so a socket probe can pass while port 5432 still refuses clients.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U coldline -d coldline"]
       interval: 2s
       timeout: 3s
       retries: 20
+      # First-boot setup can take tens of seconds on a busy runner; failed probes in
+      # this window do not count against the retries.
+      start_period: 30s
     volumes:
       - postgres-data:/var/lib/postgresql/data
     networks: [coldline]
@@ -143,6 +148,11 @@ services:
       initializer:
         condition: service_completed_successfully
     restart: unless-stopped
+    # Docker's init runs as PID 1 and forwards the stop signal. Python as PID 1
+    # ignores a SIGTERM that arrives before its own handler is installed, so a
+    # stop during startup would wait out the grace period and kill the worker
+    # mid-poll, leaving an open receive that captures the next message.
+    init: true
     healthcheck:
       test: ["CMD", "python", "-m", "worker.health"]
       interval: 5s
