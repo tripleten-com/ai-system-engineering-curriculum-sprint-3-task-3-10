@@ -78,15 +78,26 @@ jobs:
         run: .tools/bin/uv run --frozen poe verify
       # On failure or cancellation (a `timeout-minutes` stop included), and before `poe reset`
       # removes the containers: every service's logs, the initializer's included, so a
-      # startup failure leaves its reason behind.
+      # startup failure leaves its reason behind. The initializer, API and worker show their
+      # last 2000 lines and every other service its last 200, so a chatty service cannot bury
+      # them. When `compose ps` finds no container (a job that failed before the runtime
+      # started) or cannot run at all, the step says so instead of printing empty groups.
       - name: Show the runtime logs on failure
         if: failure() || cancelled()
         run: |
           compose="docker compose --profile observability --profile localstack"
+          if [ -z "$($compose ps --all --quiet 2>/dev/null)" ]; then
+            echo "No runtime containers to show."
+            exit 0
+          fi
           $compose ps --all || true
           for service in $($compose config --services); do
-            echo "::group::$service logs"
-            $compose logs --no-color --timestamps "$service" || true
+            case "$service" in
+              initializer|api|worker) tail=2000 ;;
+              *) tail=200 ;;
+            esac
+            echo "::group::$service logs (last $tail lines at most)"
+            $compose logs --no-color --timestamps --tail "$tail" "$service" || true
             echo "::endgroup::"
           done
       - name: Stop the runtime
@@ -142,15 +153,26 @@ jobs:
         run: .tools/bin/uv run --frozen poe queue-contract
       # On failure or cancellation (a `timeout-minutes` stop included), and before `poe reset`
       # removes the containers: every service's logs, the initializer's included, so a
-      # startup failure leaves its reason behind.
+      # startup failure leaves its reason behind. The initializer, API and worker show their
+      # last 2000 lines and every other service its last 200, so a chatty service cannot bury
+      # them. When `compose ps` finds no container (a job that failed before the runtime
+      # started) or cannot run at all, the step says so instead of printing empty groups.
       - name: Show the runtime logs on failure
         if: failure() || cancelled()
         run: |
           compose="docker compose --profile observability --profile localstack"
+          if [ -z "$($compose ps --all --quiet 2>/dev/null)" ]; then
+            echo "No runtime containers to show."
+            exit 0
+          fi
           $compose ps --all || true
           for service in $($compose config --services); do
-            echo "::group::$service logs"
-            $compose logs --no-color --timestamps "$service" || true
+            case "$service" in
+              initializer|api|worker) tail=2000 ;;
+              *) tail=200 ;;
+            esac
+            echo "::group::$service logs (last $tail lines at most)"
+            $compose logs --no-color --timestamps --tail "$tail" "$service" || true
             echo "::endgroup::"
           done
       - name: Stop the runtime
