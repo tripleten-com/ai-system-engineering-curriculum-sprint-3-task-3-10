@@ -157,10 +157,15 @@ def wait_for_alert_state(
 
     Shared with `tests/failure/verify_alert_recovery.py`, which polls for
     ``"resolved"`` after redrive instead of ``"active"`` after the forced
-    failure. Returns ``("absent", None)`` on timeout: a too-long `for` value
-    keeps Prometheus's rule pending, so Alertmanager never receives it at all.
+    failure. On timeout it returns the last state it observed, so a caller
+    never mistakes a timeout for the state it was waiting for:
+    ``("absent", None)`` when Alertmanager never listed the alert (a too-long
+    `for` value keeps Prometheus's rule pending, so Alertmanager never
+    receives it at all), or ``("active", <startsAt>)`` when a redrive left the
+    alert firing.
     """
     deadline = time.monotonic() + timeout_seconds
+    last_state, last_starts_at = "absent", None
     with httpx.Client(base_url=alertmanager_base_url(), timeout=5.0) as alertmanager:
         while time.monotonic() < deadline:
             response = alertmanager.get("/api/v2/alerts")
@@ -170,11 +175,14 @@ def wait_for_alert_state(
                 state = alert.get("status", {}).get("state")
                 if state == target_state:
                     return state, alert.get("startsAt")
+                last_state, last_starts_at = state or "absent", alert.get("startsAt")
             elif target_state == "resolved":
                 # An alert Alertmanager has fully forgotten also counts as resolved.
                 return "absent", None
+            else:
+                last_state, last_starts_at = "absent", None
             time.sleep(POLL_INTERVAL_SECONDS)
-    return "absent", None
+    return last_state, last_starts_at
 
 
 def _max_receive_count(sqs: Any, url: str) -> int:

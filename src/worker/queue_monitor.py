@@ -29,12 +29,14 @@ async def poll_dead_letter_depth(
     """Report the dead-letter queue's approximate depth forever.
 
     Runs beside the worker's own processing loop, not inside it, and is
-    started and cancelled as its own task by the composition root. The two
-    dead-letter failure exercises stop and restart the *processing* loop to
-    force and recover a dead-lettered message; this poller has to keep
-    reporting through that window, because `ColdlineDeadLetterQueueBacklog`
-    (`infra/observability/alerts.yml`) needs a sustained non-zero reading to
-    evaluate against, not an absent series.
+    started and cancelled as its own task by the composition root. It still
+    lives in the worker process: `poe worker-stop` stops the whole worker
+    container, and while it is down Prometheus has no
+    `coldline_job_queue_dead_letter_depth` series at all. That is why
+    `tests/failure/trigger_alert_load.py` restarts the worker as soon as its
+    message is dead-lettered: `ColdlineDeadLetterQueueBacklog`
+    (`infra/observability/alerts.yml`) can only start its `for` clock once
+    this poller reports again and Prometheus has scraped that reading.
 
     `SqsJobQueue.queue_depth`/`pending_count` are bound to the *main* queue
     only (`src/adapters/queue/sqs.py`); this reads the separate dead-letter

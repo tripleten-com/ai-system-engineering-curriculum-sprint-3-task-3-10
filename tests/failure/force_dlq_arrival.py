@@ -13,6 +13,7 @@ Tools:             Python 3.12, boto3, httpx
 
 import json
 from typing import Any
+from uuid import uuid4
 
 import httpx
 
@@ -22,8 +23,7 @@ from tests.runtime_config import host_port
 
 QUEUE_NAME = "coldline-exception-jobs"
 DEAD_LETTER_NAME = "coldline-exception-jobs-dlq"
-READING = {
-    "reading_id": "reading-dlq-exercise-001",
+READING_TEMPLATE = {
     "shipment_id": "shipment-dlq-exercise-001",
     "temperature_c": 11.4,
     "allowed_min_c": 2.0,
@@ -53,9 +53,13 @@ def main() -> int:
     again; `change_message_visibility` collapses that wait to make the exercise
     deterministic instead of waiting for real time to pass.
     """
+    # A fresh reading per run, so a rerun creates a new exception instead of
+    # replaying the last one: the API returns an existing identity without
+    # publishing it again, which would leave nothing here to dead-letter.
+    reading = {"reading_id": f"reading-dlq-exercise-{uuid4().hex[:12]}", **READING_TEMPLATE}
     api_port = host_port("COLDLINE_API_HOST_PORT", 8000)
     with httpx.Client(base_url=f"http://localhost:{api_port}", timeout=5.0) as api:
-        accepted = api.post("/api/v1/readings", json=READING)
+        accepted = api.post("/api/v1/readings", json=reading)
         accepted.raise_for_status()
         exception_id = accepted.json()["exception_id"]
 
