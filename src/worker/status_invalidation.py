@@ -36,7 +36,4 @@ async def invalidate_exception_status(exception_id: str, cache: StatusCache) -> 
     - ``cache``: the same cache adapter the read-through stores copies in, with
       ``get``, ``set`` and ``delete``, every operation keyed by exception id.
     """
-    # TODO(Task 3.10, Step 3): replace this placeholder with the invalidation: call the
-    # adapter's delete for this exception id. Placeholder: nothing is removed, so a copy
-    # stored before the worker's result keeps being served until its TTL runs out.
-    return None
+    await cache.delete(exception_id)

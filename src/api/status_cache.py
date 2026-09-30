@@ -122,14 +122,13 @@ async def read_exception_status(
     answers 404). Do not cache a missing record: a copy can never outlive a record that
     does not exist yet.
     """
-    # TODO(Task 3.10, Step 1): replace this placeholder with the read-through.
-    #   1. Ask the cache first; a hit is returned as it is.
-    #   2. On a miss, read the store; a missing record stays a store read and a 404.
-    #   3. Store a copy of an existing record with status_ttl_seconds(), then return it.
-    # Placeholder: the cache is asked, but nothing is ever stored, so every read is a
-    # miss and comes from the store, exactly as the checkpoint behaved before this Task.
-    await cache.get(exception_id)
+    cached = await cache.get(exception_id)
+    if cached is not None:
+        return StatusRead.hit(cached)
     record = await repository.get(exception_id)
     if record is None:
+        # A record the store has never seen stays a store read and a 404, so no copy
+        # can outlive it and hide the record that arrives a moment later.
         return None
+    await cache.set(exception_id, record, ttl_seconds=status_ttl_seconds())
     return StatusRead.miss(record)

@@ -17,13 +17,13 @@ answers:
   # Task 3.10 — Step 1: the TTL
   # Source: status_ttl_seconds in config/cache.yaml, the same whole number of seconds
   # (5 to 120 inclusive). The check compares the two.
-  status_ttl_seconds: 0
+  status_ttl_seconds: 30
 
   # Task 3.10 — Step 2: the first two reads
   # Source: the first two `read` lines of your last `poe cache-probe` run, as committed in
   # docs/student/cache/probe.json. Each is exactly hit or miss, as the probe printed it.
-  first_read_outcome: ""
-  second_read_outcome: ""
+  first_read_outcome: "miss"
+  second_read_outcome: "hit"
 
   # Task 3.10 — Step 3: the first read after the worker's result
   # Source: the first `read` line after the "worker result written" mark in that same run.
@@ -32,8 +32,8 @@ answers:
   #   PROCESSING, COMPLETED, FAILED.
   # stale_reads_after_update: how many reads after the mark returned any earlier state,
   #   a whole number of at least 0, counted from that output.
-  post_update_read_outcome: ""
-  post_update_read_state: ""
+  post_update_read_outcome: "miss"
+  post_update_read_state: "COMPLETED"
   stale_reads_after_update: 0
 
   # Task 3.10 — Step 4: the freshness window for recipient acceptance
@@ -50,7 +50,12 @@ answers:
   #   acting on, what the view now guarantees about that read, and one limit of what your
   #   single-host run proves.
   freshness_window:
-    reads_that_may_be_stale: ""
-    max_staleness_seconds: 0
-    acceptable_for_recipient_acceptance: false
-    note: ""
+    reads_that_may_be_stale: "in_progress_only"
+    max_staleness_seconds: 30
+    acceptable_for_recipient_acceptance: true
+    note: >-
+      The clinic was acting on the read after the result was written. That read is now
+      fresh: the worker deletes the copy when it writes, so the next refresh goes to the
+      store. My probe showed 0 stale reads after the mark, against 30 with the TTL alone.
+      Only in-progress states may lag, up to 30 s. Limit: one host, one Redis; the
+      commit-to-delete gap is real and my run cannot measure it.

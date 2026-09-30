@@ -1,0 +1,101 @@
+{
+  "counters": {
+    "after": {
+      "hits": 3.0,
+      "misses": 2.0
+    },
+    "before": {
+      "hits": 0.0,
+      "misses": 0.0
+    },
+    "rose_by": {
+      "hits": 3,
+      "misses": 2
+    }
+  },
+  "digest": "sha256:041763146da6a077e377514d08a3216bea9a7a9586b9acafec19fa0fe1b93856",
+  "exception_id": "exc-bb2024b2-2ce6-5368-b965-f5025d48495c",
+  "first_read": {
+    "outcome": "miss",
+    "state": "QUEUED"
+  },
+  "generator": "poe cache-probe",
+  "hits": 3,
+  "misses": 2,
+  "post_update_read": {
+    "outcome": "miss",
+    "state": "COMPLETED"
+  },
+  "probe": {
+    "post_update_confirmation_reads": 2,
+    "post_update_interval_seconds": 1.0,
+    "pre_update_budget_seconds": 0.2,
+    "pre_update_reads": 2
+  },
+  "reads": [
+    {
+      "age_seconds": 0.0,
+      "offset_seconds": 0.033,
+      "outcome": "miss",
+      "phase": "before_update",
+      "sequence": 1,
+      "state": "QUEUED"
+    },
+    {
+      "age_seconds": 0.005,
+      "offset_seconds": 0.037,
+      "outcome": "hit",
+      "phase": "before_update",
+      "sequence": 2,
+      "state": "QUEUED"
+    },
+    {
+      "age_seconds": 0.0,
+      "offset_seconds": 0.795,
+      "outcome": "miss",
+      "phase": "after_update",
+      "sequence": 3,
+      "state": "COMPLETED"
+    },
+    {
+      "age_seconds": 1.006,
+      "offset_seconds": 1.799,
+      "outcome": "hit",
+      "phase": "after_update",
+      "sequence": 4,
+      "state": "COMPLETED"
+    },
+    {
+      "age_seconds": 2.011,
+      "offset_seconds": 2.805,
+      "outcome": "hit",
+      "phase": "after_update",
+      "sequence": 5,
+      "state": "COMPLETED"
+    }
+  ],
+  "recorded_at": "2026-09-30T01:49:42+00:00",
+  "result": {
+    "detected_offset_seconds": 0.788,
+    "state": "COMPLETED",
+    "written_offset_seconds": 0.293
+  },
+  "schema": "coldline-cache-probe/1",
+  "second_read": {
+    "outcome": "hit",
+    "state": "QUEUED"
+  },
+  "stale_reads_after_update": 0,
+  "status_url": "/api/v1/exceptions/exc-bb2024b2-2ce6-5368-b965-f5025d48495c",
+  "store_polls": [
+    {
+      "offset_seconds": 0.297,
+      "state": "PROCESSING"
+    },
+    {
+      "offset_seconds": 0.788,
+      "state": "COMPLETED"
+    }
+  ],
+  "submission_attempts": 1
+}

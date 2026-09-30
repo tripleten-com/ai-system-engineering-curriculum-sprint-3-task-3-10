@@ -22,4 +22,4 @@
 # changing it, because the containers read this file when they are built.
 #
 # The supplied value is the bottom of the range. Choose yours in Step 1.
-status_ttl_seconds: 5
+status_ttl_seconds: 30
