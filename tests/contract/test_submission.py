@@ -41,7 +41,7 @@ PERMITTED = (
 def _window(**overrides: Any) -> dict[str, Any]:
     """Return one well-formed freshness window."""
     entry: dict[str, Any] = {
-        "reads_that_may_be_stale": "all",
+        "reads_that_may_be_stale": "none",
         "max_staleness_seconds": 30,
         "acceptable_for_recipient_acceptance": False,
         "note": "Fictional format example; it states no conclusion about the status view.",

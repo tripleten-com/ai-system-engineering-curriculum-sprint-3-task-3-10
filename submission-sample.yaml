@@ -22,7 +22,7 @@ answers:
   post_update_read_state: "PROCESSING"
   stale_reads_after_update: 7
   freshness_window:
-    reads_that_may_be_stale: "all"
+    reads_that_may_be_stale: "none"
     max_staleness_seconds: 95
     acceptable_for_recipient_acceptance: false
-    note: "Fictional: the clinic was acting on a refresh that could be a minute and a half old, and the page still shows the earlier state after the result lands, so a delivery decision cannot be made from it yet. One laptop with one Redis proves nothing about a managed cache's own failover."
+    note: "Fictional: the clinic was acting on a refresh that could be a minute and a half old, so a delivery decision cannot be made from it yet. One laptop with one Redis proves nothing about a managed cache's own failover."
