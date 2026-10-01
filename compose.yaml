@@ -1,13 +1,13 @@
-# Coldline - Task 3.4
+# Coldline - Task 3.10
 # File: compose.yaml
 # Component: Local runtime topology
-# Purpose: Run the complete Task 3.4 platform with one command.
+# Purpose: Run the complete Task 3.10 platform with one command.
 # Interacts With: API, worker, PostgreSQL/pgvector, Redis, LocalStack S3/SQS, Jaeger, Prometheus, Grafana, Alertmanager
-# Sprint/Task: Sprint 3 - Project 3 / Task 3.4
+# Sprint/Task: Sprint 3 - Project 3 / Task 3.10
 # Concepts: Service orchestration, readiness, immutable releases, bounded resources, dead-letter redrive, SLO/alert
 # Tools: Docker Compose
 
-name: coldline-task-3-4
+name: coldline-task-3-10
 
 x-coldline-environment: &coldline-environment
   COLDLINE_DATABASE_URL: postgresql://coldline:coldline_local@postgres:5432/coldline

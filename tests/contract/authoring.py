@@ -13,9 +13,10 @@ Tools:             Python 3.12, AST, uv, Docker Compose YAML
 Task 3.10 adds no visible content directory: its supplied probe lives under `infra/cache/`,
 its cache adapter under `src/adapters/cache/`, its TTL under `config/`, and the output a
 probe run generates lands under `docs/student/cache/`. It changes no service, image, or
-profile in `compose.yaml` (the Redis role it reads through was already there), so it keeps
-Task 3.4's Compose project identity rather than isolating a stack that is byte-for-byte
-the same one, matching Task 3.7's precedent. The one new domain module, `status_cache.py`,
+profile in `compose.yaml` (the Redis role it reads through was already there).
+It still supplies its own copy of `compose.yaml` under its own Compose project
+name, because a project shared with an earlier Task would let either checkout
+recreate or reset the other's containers and volumes. The one new domain module, `status_cache.py`,
 declares the cache's internal collaborators and is listed below deliberately: a status
 cache caches the store's answer, it is not a sixth port.
 """
@@ -68,10 +69,12 @@ DISTRIBUTION_NAME = "coldline-task-2-1"
 # Each checkpoint owns its own Compose project so two materializations cannot
 # share containers or volumes. The name is checked, not assumed: a whole-file
 # Compose replacement that forgot to change it would otherwise reconfigure the
-# previous Task's stack. Task 3.10 changes no Compose service, image, or
-# profile either, so it keeps Task 3.4's project identity rather than
-# isolating a stack that is byte-for-byte the same one.
-COMPOSE_PROJECT_NAME = "coldline-task-3-4"
+# previous Task's stack. Task 3.10 supplies its own copy of Task 3.4's
+# compose.yaml under its own name. Even with identical services, the images
+# build from this checkout and the observability configuration is bind-mounted
+# from it, so a shared name would let either checkout's `poe start` recreate,
+# and its `poe reset` delete, the other's containers and volumes.
+COMPOSE_PROJECT_NAME = "coldline-task-3-10"
 TASK_ID = "3.10"
 SCHEMA_FILES = (
     "infra/postgres/001_opening_checkpoint.sql",
