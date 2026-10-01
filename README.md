@@ -49,6 +49,10 @@ environment or a local `.env` file (copy `.env.example`) if a default collides w
 already running on your machine. Keep the override in place for every `poe` command;
 `poe cache-probe` reads `COLDLINE_API_HOST_PORT` the same way for its reads.
 
+This Task runs as its own Compose project, `coldline-task-3-10`. If an earlier Task's stack is
+still running, run `poe stop` in that Task's repository first; otherwise `poe start` here fails
+because the published ports are already taken.
+
 PostgreSQL, Redis, worker metrics, and OTLP remain inside the Compose network. Codespaces uses the
 same `compose.yaml` and keeps every forwarded port private. Redis carries this Task's status
 cache: both composition roots now open a client to it through `COLDLINE_REDIS_URL`, the API
